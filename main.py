@@ -8,6 +8,8 @@ import logging, argparse, datetime
 FORMAT = "%s-%s-%s %s:%s:%s"
 find_MDPM = None
 p_timecode = 0
+p_recdatetime = 0
+normalizedTimecode = 0
 
 class Packet(BigEndianStructure):
     _fields_ = (
@@ -29,7 +31,39 @@ class MDPM(BigEndianStructure):
         ('Second', c_uint8)
     )
 
-def normalizeTimecode(timecode):
+def changeDetect(recdatetime):
+    global p_recdatetime
+
+    if recdatetime == 0:
+        return True
+    
+    if recdatetime != p_recdatetime:
+        p_recdatetime = recdatetime
+        return True
+    else:
+        return None
+
+
+def decodeTimecode(normTimecode):
+
+    hour   = int(normTimecode/(27000000*60*60))
+    minute = int((normTimecode-hour*27000000*60*60)/(27000000*60))
+    second = int((normTimecode-hour*27000000*60*60-minute*60*27000000)/(27000000))
+    msec   = int((normTimecode-hour*27000000*60*60-minute*60*27000000-second*27000000)/27000)
+
+    check  = hour*27000000*3600+minute*27000000*60+second*27000000+msec*27000
+    
+    return (hour,minute,second,msec)
+    
+def timecodeInteg(timecodeDiff):
+    global normalizedTimecode
+    
+    normalizedTimecode += timecodeDiff 
+
+    return normalizedTimecode
+    
+def timecodeDiff(timecode):
+
     global p_timecode, initial_timecode
 
 #    print("tc:%d ptc:%d" % (timecode, p_timecode))
@@ -65,8 +99,16 @@ def findMDPMTag(timecode, bulk):
             if not find_MDPM:
                 setInitialTimecode(timecode)
             find_MDPM = True
-            print("%8d" % normalizeTimecode(timecode),end=" ")
-            print(decodeMDPM(mdpm))
+
+
+            recdatetime = decodeMDPM(mdpm)
+
+            if changeDetect(recdatetime):
+                dtimecode = decodeTimecode(timecodeInteg(timecodeDiff(timecode)))
+#                print(dtimecode,end="")
+#                print(recdatetime)
+                return dtimecode,recdatetime
+
             break
         
         offset += 1
@@ -92,7 +134,10 @@ def process(data):
 
     # Arrival Timecode consists of 30 bit
     timecode = packet.Timecode & 0x3fffffff
-    findMDPMTag(timecode, packet.Bulk)
+    retval = findMDPMTag(timecode, packet.Bulk)
+    if retval:
+        print(retval)
+
     
     return
 
