@@ -1,0 +1,31 @@
+#+begin_src emacs-lisp
+(- 22076796 22074540)  
+#+end_src
+
+#+RESULTS:
+: 2256
+
+
+#+begin_src emacs-lisp
+(- 22079052 22076796)    
+#+end_src
+
+#+RESULTS:
+: 2256
+
+#+begin_src emacs-lisp
+(* (* (/ 1 27000000.0) 2256) 1000)
+#+end_src
+
+#+RESULTS:
+: 0.08355555555555555
+
+#+begin_src emacs-lisp
+(ash 1 30)
+#+end_src
+
+#+RESULTS:
+: 1,073,741,824
+
+
+
