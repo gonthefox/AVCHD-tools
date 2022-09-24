@@ -6,10 +6,8 @@ import io, sys, codecs
 import logging, argparse, datetime
 
 FORMAT = "%s-%s-%s %s:%s:%s"
+find_MDPM = None
 p_timecode = 0
-p_diff  = 0
-ip_diff = 0
-
 
 class Packet(BigEndianStructure):
     _fields_ = (
@@ -31,19 +29,32 @@ class MDPM(BigEndianStructure):
         ('Second', c_uint8)
     )
 
-def findMDPMTag(timecode, buffer):
+def normalizeTimecode(timecode):
+    global p_timecode, initial_timecode
 
-    packet = Packet()
+#    print("tc:%d ptc:%d" % (timecode, p_timecode))
+    
+    if timecode < p_timecode:
+        d_timecode = (2**30-1-p_timecode) + timecode
+    else:
+        d_timecode = timecode-p_timecode
+        
+    p_timecode = timecode
+    return d_timecode
+
+def decodeMDPM(mdpm):
+    return  '{0[0]:02x}{0[1]:02x}'.format(mdpm.Year), '{0:02x}'.format(mdpm.Month), '{0:02x}'.format(mdpm.Day), \
+            '{0:02x}'.format(mdpm.Hour), '{0:02x}'.format(mdpm.Minute), '{0:02x}'.format(mdpm.Second)
+
+def findMDPMTag(timecode, bulk):
+
+    global find_MDPM
+    
+    buffer = io.BytesIO(bulk)    
+
     mdpm   = MDPM()
-    
-    buffer.seek(packet.Timecode)
-    buffer.readinto(mdpm)
-
     offset = 0
-    global p_timecode
-    global ip_diff
-    global p_diff
-    
+
     while offset<192:
 
         buffer.seek(offset)
@@ -51,36 +62,24 @@ def findMDPMTag(timecode, buffer):
         
         if mdpm.Tag[0] == 0x4d and mdpm.Tag[1] == 0x44 and mdpm.Tag[2] == 0x50 and mdpm.Tag[3] == 0x4d:
 
-            diff = timecode - p_timecode
-            if diff < 0:
-                diff = 1073741823 - p_timecode + timecode
-
-            ip_diff = ip_diff+p_diff
-            it_diff  = ip_diff/27000000.0*1000
-
-            second  = int(it_diff/1000)%60
-            minute = int(it_diff/60000)%60
-            hour = int(it_diff/3600000)%24
-            msec = int(it_diff)%1000
-            
-#            print("%d %d %d" % (timecode, p_timecode, diff),end="")
-            print("%8d %02d:%02d:%02d,%03d" % (it_diff,hour,minute,second,msec),end="")            
-#            print(" %02x%02x %02x%02x" % (mdpm.Tag[0],mdpm.Tag[1],mdpm.Tag[2],mdpm.Tag[3]),end="")
-#            print(" (%03d)" % offset,end="")
-
-            print(" %02x%02x" % (mdpm.Year[0],mdpm.Year[1]),end="")
-            print("-%02x" % (mdpm.Month),end="")
-            print("-%02x" % (mdpm.Day),end="")            
-            print(" %02x" % (mdpm.Hour),end="")
-            print(":%02x" % (mdpm.Minute),end="")
-            print(":%02x" % (mdpm.Second),end="")            
-            print()
-            p_timecode=timecode
-            p_diff = diff
+            if not find_MDPM:
+                setInitialTimecode(timecode)
+            find_MDPM = True
+            print("%8d" % normalizeTimecode(timecode),end=" ")
+            print(decodeMDPM(mdpm))
             break
         
         offset += 1
 
+    return
+
+
+def setInitialTimecode(timecode):
+    global initial_timecode, p_timecode
+    p_timecode = timecode
+
+    print("initial timecode:%d" % p_timecode)
+    
     return
 
 # process each packet
@@ -93,7 +92,7 @@ def process(data):
 
     # Arrival Timecode consists of 30 bit
     timecode = packet.Timecode & 0x3fffffff
-    findMDPMTag(timecode, buffer)
+    findMDPMTag(timecode, packet.Bulk)
     
     return
 
@@ -102,7 +101,11 @@ if __name__ == '__main__':
     data = None
     with open('sample.m2ts','rb') as file:
 
-        data = file.read(sizeof(Packet()))        
+        # for the first packet
+        data = file.read(sizeof(Packet()))
+        process(data)
+
+        # the second packet and after
         while data:
             
             data = file.read(sizeof(Packet()))
