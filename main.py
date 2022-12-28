@@ -53,8 +53,10 @@ def decodeTimecode(normTimecode):
 
     check  = hour*27000000*3600+minute*27000000*60+second*27000000+msec*27000
     
-    return (hour,minute,second,msec)
-    
+    return '{0:02d}'.format(hour),'{0:02d}'.format(minute),\
+        '{0:02d}'.format(second),'{0:03d}'.format(msec)
+
+
 def timecodeInteg(timecodeDiff):
     global normalizedTimecode
     
