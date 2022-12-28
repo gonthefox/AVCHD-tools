@@ -5,11 +5,14 @@ from struct import *
 import io, sys, codecs
 import logging, argparse, datetime
 
-FORMAT = "%s-%s-%s %s:%s:%s"
+FORMAT  = "%02s:%02s:%02s,%03s --> %02s:%02s:%02s,%03s"
+FORMAT2 = "%04s-%02s-%02s %02s:%02s:%02s"
 find_MDPM = None
 p_timecode = 0
 p_recdatetime = 0
 normalizedTimecode = 0
+
+
 
 class Packet(BigEndianStructure):
     _fields_ = (
@@ -120,7 +123,7 @@ def setInitialTimecode(timecode):
     global initial_timecode, p_timecode
     p_timecode = timecode
 
-    print("initial timecode:%d" % p_timecode)
+#    print("initial timecode:%d" % p_timecode)
     
     return
 
@@ -136,14 +139,17 @@ def process(data):
     timecode = packet.Timecode & 0x3fffffff
     retval = findMDPMTag(timecode, packet.Bulk)
     if retval:
-        print(retval)
+        return retval
+    else:
+        return None
 
-    
-    return
 
 if __name__ == '__main__':
 
     data = None
+    dtimecode = "('00', '00', '00', '000')"
+    ddatetime = None
+    index = 0
     with open('sample.m2ts','rb') as file:
 
         # for the first packet
@@ -152,8 +158,21 @@ if __name__ == '__main__':
 
         # the second packet and after
         while data:
-            
             data = file.read(sizeof(Packet()))
-            process(data)
-
+            retval = process(data)
+            if retval:
+                timecode, datetime = retval
+                if ddatetime:
+                    index = index+1
+#                    print(dtimecode,timecode,ddatetime)
+                    dhh,dmm,dss,dms = dtimecode
+                    hh,  mm, ss, ms = timecode
+                    year,month,day,hour,minute,second = ddatetime
+                    print("%d" % index)
+                    print(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
+                    print(FORMAT2 % (year,month,day,hour,minute,second))
+                    print()
+                dtimecode = timecode
+                ddatetime = datetime
+            
     exit()
