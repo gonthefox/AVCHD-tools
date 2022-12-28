@@ -107,8 +107,6 @@ def findMDPMTag(timecode, bulk):
 
             if changeDetect(recdatetime):
                 dtimecode = decodeTimecode(timecodeInteg(timecodeDiff(timecode)))
-#                print(dtimecode,end="")
-#                print(recdatetime)
                 return dtimecode,recdatetime
 
             break
