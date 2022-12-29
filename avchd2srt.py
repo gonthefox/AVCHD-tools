@@ -7,6 +7,7 @@ import logging, argparse, datetime
 
 FORMAT  = "%02s:%02s:%02s,%03s --> %02s:%02s:%02s,%03s"
 FORMAT2 = "%04s-%02s-%02s %02s:%02s:%02s"
+FORMAT3 = "%04s:%02s:%02s %02s:%02s:%02s"
 find_MDPM = None
 p_timecode = 0
 p_recdatetime = 0
@@ -136,19 +137,41 @@ def process(data):
     # Arrival Timecode consists of 30 bit
     timecode = packet.Timecode & 0x3fffffff
     retval = findMDPMTag(timecode, packet.Bulk)
-    if retval:
-        return retval
-    else:
-        return None
 
+    return retval
+
+def getRecDatetime(file):
+
+    # for the first packet
+    data = file.read(sizeof(Packet()))
+    process(data)
+
+    # the second packet and after
+    while data:
+        data = file.read(sizeof(Packet()))
+        retval = process(data)
+        if retval:
+            timecode, datetime = retval
+            year,month,day,hour,minute,second = datetime
+            return (FORMAT3 % (year,month,day,hour,minute,second))
 
 if __name__ == '__main__':
+
+    parser= argparse.ArgumentParser(description="AVCHD2SRT")
+
+    parser.add_argument('-a', '--avchdfile', help='AVCHD input file name')
+    parser.add_argument('-r', '--rdfile',    help='RECDATE output filename')
+    parser.add_argument('-o', '--option',    help='option')
+    args = parser.parse_args()
+
+    rdfile = open(args.rdfile,'w')
 
     data = None
     dtimecode = "('00', '00', '00', '000')"
     ddatetime = None
     index = 0
-    with open('sample.m2ts','rb') as file:
+    
+    with open(args.avchdfile,'rb') as file:
 
         # for the first packet
         data = file.read(sizeof(Packet()))
@@ -162,15 +185,28 @@ if __name__ == '__main__':
                 timecode, datetime = retval
                 if ddatetime:
                     index = index+1
-#                    print(dtimecode,timecode,ddatetime)
                     dhh,dmm,dss,dms = dtimecode
                     hh,  mm, ss, ms = timecode
                     year,month,day,hour,minute,second = ddatetime
+
+                    if not args.option == 'srt':
+                        print(FORMAT3 % (year,month,day,hour,minute,second))
+                        exit()
+                    
                     print("%d" % index)
                     print(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
                     print(FORMAT2 % (year,month,day,hour,minute,second))
-                    print()
+                    print("")
+
+                    rdfile.write("%d\n" % index)
+                    rdfile.write(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
+                    rdfile.write("\n")
+                    rdfile.write(FORMAT2 % (year,month,day,hour,minute,second))
+                    rdfile.write("\n")                    
+                    rdfile.write("\n")
+
                 dtimecode = timecode
                 ddatetime = datetime
-            
+
+    rdfile.close()
     exit()
