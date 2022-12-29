@@ -6,11 +6,10 @@ import datetime
 from PIL import Image, ExifTags
 
 FFMPEG = """
-ffmpeg -i ${AVCHD_FILE} -i recdatetime.srt -map 0:v -map 0:a -map 1 \
--metadata:s:s:0 language=eng -c:v copy -c:a aac -c:s mov_text ${MP4_FILE}
+ffmpeg -i %s -i recdatetime.srt -map 0:v -map 0:a -map 1 -metadata:s:s:0 language=eng -c:v copy -c:a aac -c:s mov_text %s
 """
 
-EXIFTOOL = 'exiftool -CreateDate="%s" -DateTimeOriginal="%s" -title="%s" %s -overwrite_original_in_place'
+EXIFTOOL = 'exiftool -CreateDate="%s" -DateTimeOriginal="%s" %s -overwrite_original_in_place'
 
 DateTimeOriginal = 36867
 
@@ -58,11 +57,10 @@ if __name__ == '__main__':
         recdatetime = None
         print("%d/%d %s" % (index+1, total, avchdfile))
         with open(avchdfile,'rb') as file:
-            recdatetime = avchd.getRecDatetime(file)
+            data = file.read()
+            recdatetime = avchd.getRecdatetime(data, 0)
 
         print("RECDATETIME: %s" % recdatetime)
-
-
         
         # 撮影日付時刻を取得しMP4ファイルが存在するか確認する
         year    = recdatetime[0:4]
@@ -75,7 +73,6 @@ if __name__ == '__main__':
         mp4file = filepath+os.path.splitext(os.path.basename(avchdfile))[0]+".mp4"        
 
         print("%s" % mp4file)
-        exit()
 
         # MP4ファイルが存在していれば変換処理済みなのでスキップ
         # MP4ファイルが存在していなければ、未処理なので変換を実行
@@ -84,18 +81,13 @@ if __name__ == '__main__':
             if not os.path.exists(filepath):
                 os.makedirs(filepath)
             
-            dv.rdfile = open("recdatetime.srt",'w')
-            dv.tcfile = open("timecode.srt",'w')     
+            avchd.rdfile = open("recdatetime.srt",'w')
+            avchd.process(data, 0)
+            avchd.rdfile.close()
             
-            offset = dv.find_movi(data)
-            dv.process(data, offset)
-
-            dv.rdfile.close()
-            dv.tcfile.close()
-            
-            os.system(AVHCD % (aavhcdfile, mp4file))
+            os.system(FFMPEG % (avchdfile, mp4file))
             print(recdatetime)
-            os.system(EXIFTOOL % (recdatetime, recdatetime, title, mp4file))
+            os.system(EXIFTOOL % (recdatetime, recdatetime, mp4file))
 #            os.system('rm %s' % mp4file+"_original")
         else:
             print("file exists: %s. skipped." % mp4file)
