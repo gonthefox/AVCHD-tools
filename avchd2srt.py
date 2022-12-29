@@ -126,35 +126,97 @@ def setInitialTimecode(timecode):
     
     return
 
-# process each packet
-def process(data):
+def getRecdatetime(data, offset):
 
-    packet = Packet()
-    
     buffer = io.BytesIO(data)
-    buffer.readinto(packet)
+    buffer.seek(offset)
 
-    # Arrival Timecode consists of 30 bit
-    timecode = packet.Timecode & 0x3fffffff
-    retval = findMDPMTag(timecode, packet.Bulk)
+    index=0
+    ddatetime=None
+    
+    while(True):
 
-    return retval
+        packet = Packet()            
+        if not buffer.readinto(packet):
+            print("can't read.")
+            break
 
-def getRecDatetime(file):
+        # Arrival Timecode consists of 30 bit
+        timecode = packet.Timecode & 0x3fffffff
+        retval = findMDPMTag(timecode, packet.Bulk)
 
-    # for the first packet
-    data = file.read(sizeof(Packet()))
-    process(data)
-
-    # the second packet and after
-    while data:
-        data = file.read(sizeof(Packet()))
-        retval = process(data)
         if retval:
             timecode, datetime = retval
-            year,month,day,hour,minute,second = datetime
-            return (FORMAT3 % (year,month,day,hour,minute,second))
 
+            if ddatetime:
+
+                index = index+1
+                dhh,dmm,dss,dms = dtimecode
+                hh,  mm, ss, ms = timecode
+                year,month,day,hour,minute,second = datetime
+                return (FORMAT3 % (year,month,day,hour,minute,second))
+            
+            dtimecode = timecode
+            ddatetime = datetime
+            
+        offset += sizeof(Packet())
+        buffer.seek(offset)
+
+        
+def process(data, offset):
+
+#    print("process0")
+    
+    buffer = io.BytesIO(data)
+    buffer.seek(offset)
+
+    index=0
+    ddatetime=None
+    
+    while(True):
+
+#        print("index:%d buffer:%d" % (index,buffer.tell()))
+        
+        packet = Packet()            
+        if not buffer.readinto(packet):
+            print("can't read.")
+            break
+
+        # Arrival Timecode consists of 30 bit
+        timecode = packet.Timecode & 0x3fffffff
+        retval = findMDPMTag(timecode, packet.Bulk)
+
+#        print(retval)
+        
+        if retval:
+            timecode, datetime = retval
+
+            if ddatetime:
+
+                index = index+1
+                dhh,dmm,dss,dms = dtimecode
+                hh,  mm, ss, ms = timecode
+                year,month,day,hour,minute,second = ddatetime
+
+                print("%d" % index)
+                print(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
+                print(FORMAT2 % (year,month,day,hour,minute,second))
+                print("")
+
+                rdfile.write("%d\n" % index)
+                rdfile.write(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
+                rdfile.write("\n")
+                rdfile.write(FORMAT2 % (year,month,day,hour,minute,second))
+                rdfile.write("\n")                    
+                rdfile.write("\n")
+                
+            dtimecode = timecode
+            ddatetime = datetime
+
+            
+        offset += sizeof(Packet())
+        buffer.seek(offset)
+        
 if __name__ == '__main__':
 
     parser= argparse.ArgumentParser(description="AVCHD2SRT")
@@ -163,50 +225,19 @@ if __name__ == '__main__':
     parser.add_argument('-r', '--rdfile',    help='RECDATE output filename')
     parser.add_argument('-o', '--option',    help='option')
     args = parser.parse_args()
-
+    
     rdfile = open(args.rdfile,'w')
-
     data = None
-    dtimecode = "('00', '00', '00', '000')"
-    ddatetime = None
-    index = 0
     
     with open(args.avchdfile,'rb') as file:
 
         # for the first packet
-        data = file.read(sizeof(Packet()))
-        process(data)
+        data = file.read()
 
-        # the second packet and after
-        while data:
-            data = file.read(sizeof(Packet()))
-            retval = process(data)
-            if retval:
-                timecode, datetime = retval
-                if ddatetime:
-                    index = index+1
-                    dhh,dmm,dss,dms = dtimecode
-                    hh,  mm, ss, ms = timecode
-                    year,month,day,hour,minute,second = ddatetime
-
-                    if not args.option == 'srt':
-                        print(FORMAT3 % (year,month,day,hour,minute,second))
-                        exit()
-                    
-                    print("%d" % index)
-                    print(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
-                    print(FORMAT2 % (year,month,day,hour,minute,second))
-                    print("")
-
-                    rdfile.write("%d\n" % index)
-                    rdfile.write(FORMAT  % (dhh,dmm,dss,dms,hh,mm,ss,ms))
-                    rdfile.write("\n")
-                    rdfile.write(FORMAT2 % (year,month,day,hour,minute,second))
-                    rdfile.write("\n")                    
-                    rdfile.write("\n")
-
-                dtimecode = timecode
-                ddatetime = datetime
+        if args.option == 'srt':
+            process(data, 0)
+        else:
+            print(getRecdatetime(data, 0))
 
     rdfile.close()
     exit()
